@@ -10,7 +10,7 @@ interface FileItem {
   source: string;
 }
 
-export function UploadDropzone() {
+export function UploadDropzone({ hideHeader = false }: { hideHeader?: boolean }) {
   const router = useRouter();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -78,23 +78,25 @@ export function UploadDropzone() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Hero Header */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-400 border border-indigo-500/20">
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>Format-Agnostic AI Log Intelligence</span>
+      {!hideHeader && (
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-400 border border-indigo-500/20">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Format-Agnostic AI Log Intelligence</span>
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-5xl">
+            Upload any log. <br />
+            <span className="bg-gradient-to-r from-indigo-400 via-cyan-400 to-indigo-300 bg-clip-text text-transparent">
+              Uncover root causes instantly.
+            </span>
+          </h1>
+          <p className="mx-auto max-w-2xl text-sm sm:text-base text-slate-400">
+            Upload log files in JSON lines, Log4j, Nginx, Python, or raw plain text.
+            LogLens unifies them with Drain3 template mining, computes cross-service causality,
+            and uses Gemma to explain root causes.
+          </p>
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-5xl">
-          Upload any log. <br />
-          <span className="bg-gradient-to-r from-indigo-400 via-cyan-400 to-indigo-300 bg-clip-text text-transparent">
-            Uncover root causes instantly.
-          </span>
-        </h1>
-        <p className="mx-auto max-w-2xl text-sm sm:text-base text-slate-400">
-          Upload log files in JSON lines, Log4j, Nginx, Python, or raw plain text.
-          LogLens unifies them with Drain3 template mining, computes cross-service causality,
-          and uses Gemma to explain root causes.
-        </p>
-      </div>
+      )}
 
       {/* One-Click Demo Card */}
       <div className="relative overflow-hidden rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/40 via-slate-900/80 to-slate-900 p-6 shadow-xl">
