@@ -8,6 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.models import (
     UploadResponse, SessionSummary, TimelineBucket, Anomaly,
     CausalityGraph, IncidentReport, ChatRequest, ChatResponse, AuthUser
+    UploadResponse,
+    SessionSummary,
+    TimelineBucket,
+    Anomaly,
+    CausalityGraph,
+    IncidentReport,
+    ChatRequest,
+    ChatResponse,
 )
 from backend.auth import GoogleAuthError, build_google_login_url, exchange_code_for_session, get_session, delete_session
 from backend.config import AUTH_COOKIE_SECURE, AUTH_SESSION_COOKIE, FRONTEND_URL, AUTH_SESSION_MAX_AGE
@@ -16,13 +24,13 @@ from backend.pipeline.coordinator import run_session_analysis
 from backend.pipeline.llm_analysis import answer_nl_query
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger("main")
 
 app = FastAPI(
-    title="LogLens API",
-    description="AI Log Analysis Platform Backend",
-    version="1.0.0"
+    title="LogLens API", description="AI Log Analysis Platform Backend", version="1.0.0"
 )
 
 # CORS enabled for Next.js frontend
@@ -33,6 +41,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def read_root():
@@ -85,7 +94,7 @@ def logout(request: Request, response: Response):
 async def upload_logs(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
-    sources: Optional[List[str]] = Form(None)
+    sources: Optional[List[str]] = Form(None),
 ):
     """
     Accepts multiple log files with optional source labels.
@@ -114,8 +123,9 @@ async def upload_logs(
     return UploadResponse(
         session_id=session_id,
         message="Log files received. Analysis enqueued.",
-        file_count=len(files)
+        file_count=len(files),
     )
+
 
 @app.post("/api/demo/load", response_model=UploadResponse)
 async def load_demo_data(background_tasks: BackgroundTasks):
@@ -124,8 +134,9 @@ async def load_demo_data(background_tasks: BackgroundTasks):
     across 4 distinct services with 4 distinct log formats and triggers analysis.
     """
     from demo.generate_demo_logs import generate_demo_logs
+
     files_dict = generate_demo_logs()
-    
+
     session_id = str(uuid.uuid4())
     raw_files = [
         (fname, content.encode("utf-8"), fname.replace(".log", ""))
@@ -142,7 +153,7 @@ async def load_demo_data(background_tasks: BackgroundTasks):
     return UploadResponse(
         session_id=session_id,
         message="Demo cascading failure logs loaded successfully.",
-        file_count=len(raw_files)
+        file_count=len(raw_files),
     )
 
 
@@ -153,12 +164,14 @@ def get_summary(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found.")
     return sess.summary
 
+
 @app.get("/api/sessions/{session_id}/timeline", response_model=List[TimelineBucket])
 def get_timeline(session_id: str):
     sess = store.get(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found.")
     return sess.timeline
+
 
 @app.get("/api/sessions/{session_id}/anomalies", response_model=List[Anomaly])
 def get_anomalies(session_id: str):
@@ -167,12 +180,14 @@ def get_anomalies(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found.")
     return sess.anomalies
 
+
 @app.get("/api/sessions/{session_id}/graph", response_model=CausalityGraph)
 def get_graph(session_id: str):
     sess = store.get(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found.")
     return sess.graph
+
 
 @app.get("/api/sessions/{session_id}/incident", response_model=IncidentReport)
 def get_incident(session_id: str):
@@ -182,6 +197,7 @@ def get_incident(session_id: str):
     if not sess.incident_report:
         raise HTTPException(status_code=202, detail="Incident report still processing.")
     return sess.incident_report
+
 
 @app.post("/api/sessions/{session_id}/chat", response_model=ChatResponse)
 def chat_with_session(session_id: str, request: ChatRequest):
@@ -195,8 +211,9 @@ def chat_with_session(session_id: str, request: ChatRequest):
         summary=sess.summary,
         anomalies=sess.anomalies,
         graph=sess.graph,
-        sample_errors=error_entries
+        sample_errors=error_entries,
     )
+
 
 @app.get("/api/sessions/{session_id}/logs")
 def get_session_logs(
@@ -204,7 +221,7 @@ def get_session_logs(
     limit: int = 100,
     offset: int = 0,
     service: Optional[str] = None,
-    level: Optional[str] = None
+    level: Optional[str] = None,
 ):
     """Retrieve raw parsed unified log entries with optional filters."""
     sess = store.get(session_id)
@@ -224,5 +241,5 @@ def get_session_logs(
         "total": total,
         "offset": offset,
         "limit": limit,
-        "logs": [e.model_dump() for e in page]
+        "logs": [e.model_dump() for e in page],
     }
