@@ -5,10 +5,30 @@ import {
   CausalityGraph,
   IncidentReport,
   ChatResponse,
-  LogEntry
+  LogEntry,
+  AuthUser
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const GOOGLE_LOGIN_URL = `${API_BASE_URL}/api/auth/google/login`;
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error("Failed to load authentication session");
+  return res.json();
+}
+
+export async function logout(): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Logout failed");
+}
 
 export async function uploadLogs(files: File[], sources: string[]): Promise<{ session_id: string; message: string }> {
   const formData = new FormData();
