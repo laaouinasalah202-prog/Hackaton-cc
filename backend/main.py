@@ -31,6 +31,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
+
+class EndpointFilter(logging.Filter):
+    """Filter out noisy healthcheck polling from uvicorn access logs."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("/health") == -1
+
+
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+
 app = FastAPI(
     title="LogLens API", description="AI Log Analysis Platform Backend", version="1.0.0"
 )
@@ -48,6 +57,11 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"name": "LogLens API", "version": "1.0.0", "status": "online"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/api/auth/google/login")
 def google_login():
