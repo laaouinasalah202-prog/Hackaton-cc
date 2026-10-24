@@ -1,11 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-<<<<<<< HEAD
-import { Activity, ShieldAlert, Cpu, Sparkles, Terminal } from "lucide-react";
-
-export function Navbar({ sessionId }: { sessionId?: string }) {
-=======
 import { Activity, Terminal, LogIn, UserPlus, LogOut, User } from "lucide-react";
 import { getCurrentUser, GOOGLE_LOGIN_URL, logout } from "@/lib/api";
 import { AuthUser } from "@/lib/types";
@@ -25,7 +21,6 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
     }
   };
 
->>>>>>> 77c3cbc (fix google authentication and merge front with end authentication)
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#0b101d]/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -65,9 +60,6 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
           >
             New Session
           </Link>
-<<<<<<< HEAD
-=======
-
           <div className="h-4 w-px bg-slate-800 hidden sm:block" />
 
           {currentUser ? (
@@ -102,7 +94,6 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
               </Link>
             </div>
           )}
->>>>>>> 77c3cbc (fix google authentication and merge front with end authentication)
         </div>
       </div>
     </header>
