@@ -15,13 +15,21 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export const GOOGLE_LOGIN_URL = `${API_BASE_URL}/api/auth/google/login`;
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    credentials: "include",
-    cache: "no-store",
-  });
-  if (res.status === 401) return null;
-  if (!res.ok) throw new Error("Failed to load authentication session");
-  return res.json();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.status === 401) return null;
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function logout(): Promise<void> {

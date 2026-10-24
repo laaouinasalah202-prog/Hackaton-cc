@@ -28,7 +28,8 @@ check-uv:
 install: install-backend install-frontend ## Install backend + frontend dependencies
 
 install-backend: check-uv ## Install Python deps with uv (creates .venv)
-	uv sync
+	@if [ ! -f pyproject.toml ]; then uv init --app; fi
+	uv add -r backend/requirements.txt
 
 install-frontend: check-node ## Install npm deps
 	cd $(FRONTEND_DIR) && npm install
@@ -42,12 +43,24 @@ env: ## Create backend/.env from example if one exists
 # ---------- Run ----------
 
 backend: check-uv ## Run FastAPI backend on :8000 (hot reload)
+	@if [ ! -d .venv ] || [ ! -f .venv/bin/uvicorn ]; then \
+		if [ ! -f pyproject.toml ]; then uv init --app; fi; \
+		uv add -r backend/requirements.txt; \
+	fi
 	uv run uvicorn backend.main:app --host $(BACKEND_HOST) --port $(BACKEND_PORT) --reload
 
 frontend: check-node $(FRONTEND_DIR)/node_modules ## Run Next.js frontend on :3000
 	cd $(FRONTEND_DIR) && npm run dev
 
 dev: check-uv check-node $(FRONTEND_DIR)/node_modules env ## Run backend AND frontend together (Ctrl+C stops both)
+	@if [ ! -f pyproject.toml ]; then \
+		echo "Initializing uv project..."; \
+		uv init --app; \
+	fi
+	@if [ ! -d .venv ] || [ ! -f .venv/bin/uvicorn ]; then \
+		echo "Installing backend dependencies from backend/requirements.txt..."; \
+		uv add -r backend/requirements.txt; \
+	fi
 	@echo "Backend:  http://localhost:$(BACKEND_PORT)  (docs: /docs)"
 	@echo "Frontend: http://localhost:3000"
 	@trap 'kill 0' INT TERM EXIT; \

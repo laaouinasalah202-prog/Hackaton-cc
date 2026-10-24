@@ -102,12 +102,7 @@ export default function HomePage() {
 
             {/* Interactive Call to Actions */}
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-lg mx-auto">
-              {isLoadingAuth ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
-                  <span>Checking session...</span>
-                </div>
-              ) : currentUser ? (
+              {currentUser ? (
                 <>
                   <button
                     onClick={handleLaunchDemo}
