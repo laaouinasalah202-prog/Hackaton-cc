@@ -15,6 +15,14 @@ export interface SessionSummary {
   anomaly_count: number;
 }
 
+export interface AuthUser {
+  sub: string;
+  email: string;
+  name: string;
+  picture: string | null;
+  email_verified: boolean;
+}
+
 export interface TimelineBucket {
   timestamp: string;
   total: number;

@@ -60,6 +60,25 @@ cp backend/.env.example backend/.env
 # (Optional) Edit backend/.env to set GEMMA_API_KEY
 ```
 
+#### Google authentication
+
+In Google Cloud Console, create an OAuth client of type **Web application**. Add
+`http://localhost:8000/api/auth/google/callback` to its authorized redirect URIs,
+then put the client ID and secret in `backend/.env`:
+
+```env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+FRONTEND_URL=http://localhost:3000
+AUTH_COOKIE_SECURE=false
+```
+
+The backend endpoints are `GET /api/auth/google/login`, `GET /api/auth/me`, and
+`POST /api/auth/logout`. Login uses a short-lived OAuth state token and stores the
+authenticated session in an HttpOnly cookie. The current session store is in-memory,
+so use a shared database or Redis before running multiple production workers.
+
 Run backend server:
 ```bash
 source .venv/bin/activate
@@ -111,3 +130,6 @@ LogLens includes a built-in multi-format cascading failure simulation in `/demo`
 - `GET  /api/sessions/{id}/incident`: LLM root cause analysis report.
 - `POST /api/sessions/{id}/chat`: Natural language questions answered by Gemma.
 - `GET  /api/sessions/{id}/logs`: Filtered, paginated unified canonical log records.
+- `GET  /api/auth/google/login`: Start Google OAuth login.
+- `GET  /api/auth/me`: Return the authenticated Google profile.
+- `POST /api/auth/logout`: Revoke the current local session and expire its cookie.

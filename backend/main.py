@@ -2,9 +2,12 @@ import asyncio
 import logging
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.models import (
+    UploadResponse, SessionSummary, TimelineBucket, Anomaly,
+    CausalityGraph, IncidentReport, ChatRequest, ChatResponse, AuthUser
     UploadResponse,
     SessionSummary,
     TimelineBucket,
@@ -14,6 +17,8 @@ from backend.models import (
     ChatRequest,
     ChatResponse,
 )
+from backend.auth import GoogleAuthError, build_google_login_url, exchange_code_for_session, get_session, delete_session
+from backend.config import AUTH_COOKIE_SECURE, AUTH_SESSION_COOKIE, FRONTEND_URL, AUTH_SESSION_MAX_AGE
 from backend.session_store import store
 from backend.pipeline.coordinator import run_session_analysis
 from backend.pipeline.llm_analysis import answer_nl_query
@@ -42,6 +47,48 @@ app.add_middleware(
 def read_root():
     return {"name": "LogLens API", "version": "1.0.0", "status": "online"}
 
+@app.get("/api/auth/google/login")
+def google_login():
+    try:
+        return RedirectResponse(build_google_login_url())
+    except GoogleAuthError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+@app.get("/api/auth/google/callback")
+async def google_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error:
+        raise HTTPException(status_code=400, detail=f"Google authentication failed: {error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing Google authorization parameters.")
+
+    try:
+        session_id, _ = await exchange_code_for_session(code, state)
+    except (GoogleAuthError, HTTPException) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    response = RedirectResponse(f"{FRONTEND_URL}/")
+    response.set_cookie(
+        key=AUTH_SESSION_COOKIE,
+        value=session_id,
+        max_age=AUTH_SESSION_MAX_AGE,
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite="lax",
+    )
+    return response
+
+@app.get("/api/auth/me", response_model=AuthUser)
+def current_user(request: Request):
+    user = get_session(request.cookies.get(AUTH_SESSION_COOKIE))
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    return user
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response):
+    delete_session(request.cookies.get(AUTH_SESSION_COOKIE))
+    response.delete_cookie(AUTH_SESSION_COOKIE)
+    return {"message": "Logged out"}
 
 @app.post("/api/upload", response_model=UploadResponse)
 async def upload_logs(
