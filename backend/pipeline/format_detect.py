@@ -21,7 +21,11 @@ KNOWN_REGEXES: Dict[str, re.Pattern] = {
         re.DOTALL
     ),
     "nginx_combined": re.compile(
-        r'^(?P<client_ip>\S+)\s+\S+\s+\S+\s+\[(?P<ts>[^\]]+)\]\s+"(?P<method>[A-Z]+)\s+(?P<path>[^\s]+)\s+(?P<proto>[^"]+)"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)(?:\s+"(?P<referrer>[^"]*)")?(?:\s+"(?P<agent>[^"]*)")?.*$',
+        r'^(?P<client_ip>\S+)\s+\S+\s+\S+\s+\[(?P<ts>[^\]]+)\]\s+"(?P<method>[A-Z]+)\s+(?P<path>[^\s]+)\s+(?P<proto>[^"]+)"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)(?:\s+"(?P<referrer>[^"]*)")?(?:\s+"(?P<agent>[^"]*)")?(?:\s+(?P<extra>.*))?$',
+        re.DOTALL
+    ),
+    "postgres": re.compile(
+        r'^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[,\.]\d{3})?(?:\s+[A-Z]{3,4})?)\s+\[(?P<pid>\d+)\]\s+\[(?P<level>[A-Z]+)\]\s+(?:\[(?P<module>[^\]]+)\]\s+)?(?P<message>.*)$',
         re.DOTALL
     ),
     "syslog": re.compile(
@@ -105,7 +109,12 @@ def parse_with_regex(match: re.Match, regex_name: str, default_source: str) -> L
         method = groups.get("method", "GET")
         path = groups.get("path", "/")
         proto = groups.get("proto", "HTTP/1.1")
-        msg = f"{method} {path} {proto} -> {status}"
+        extra = (groups.get("extra") or "").strip()
+
+        msg = f"{method} {path} -> {status}"
+        if extra:
+            msg = f"{method} {path} -> {status} ({extra})"
+
         status_num = int(status) if status.isdigit() else 200
         if status_num >= 500:
             raw_level = "ERROR"
@@ -113,12 +122,34 @@ def parse_with_regex(match: re.Match, regex_name: str, default_source: str) -> L
             raw_level = "WARN"
         else:
             raw_level = "INFO"
+
         attrs = {
             "client_ip": groups.get("client_ip"),
             "status": status_num,
             "bytes": groups.get("bytes"),
             "agent": groups.get("agent"),
         }
+        if extra:
+            attrs["extra"] = extra
+            latency_match = re.search(r'(?:upstream_response_time|response_time|rt|latency)[=:]\s*([0-9.]+)', extra, re.IGNORECASE)
+            if latency_match:
+                try:
+                    lat = float(latency_match.group(1))
+                    attrs["latency"] = lat
+                    if lat > 5.0:
+                        attrs["high_latency"] = True
+                except ValueError:
+                    pass
+            elif re.search(r'\b\d+\.\d+\b', extra):
+                m_lat = re.search(r'\b(\d+\.\d+)\b', extra)
+                if m_lat:
+                    try:
+                        lat = float(m_lat.group(1))
+                        attrs["latency"] = lat
+                        if lat > 5.0:
+                            attrs["high_latency"] = True
+                    except ValueError:
+                        pass
     elif regex_name == "syslog":
         app = groups.get("app", default_source)
         host = groups.get("host", "")

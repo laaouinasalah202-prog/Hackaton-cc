@@ -9,6 +9,8 @@ import {
   getCausalityGraph,
   getIncidentReport,
   getSessionLogs,
+  getIncidentAnalysis,
+  updateSessionDependencies,
 } from "@/lib/api";
 import {
   SessionSummary,
@@ -17,18 +19,34 @@ import {
   CausalityGraph,
   IncidentReport,
   LogEntry,
+  IncidentAnalysis,
+  DependencyEdge,
+  EvidenceItem,
 } from "@/lib/types";
 
 import { Navbar } from "@/components/Navbar";
 import { SummaryCards } from "@/components/SummaryCards";
-import { TimelineChart } from "@/components/TimelineChart";
-import { ErrorHeatmap } from "@/components/ErrorHeatmap";
+import { IncidentStoryCard } from "@/components/IncidentStoryCard";
+import { ServiceFlow } from "@/components/ServiceFlow";
+import { SwimlaneTimeline } from "@/components/SwimlaneTimeline";
 import { ServiceLogsChart } from "@/components/ServiceLogsChart";
-import { IncidentReportPanel } from "@/components/IncidentReportPanel";
+import { ErrorHeatmap } from "@/components/ErrorHeatmap";
+import { TimelineChart } from "@/components/TimelineChart";
 import { AnomalyList } from "@/components/AnomalyList";
 import { ChatBox } from "@/components/ChatBox";
 import { LogTable } from "@/components/LogTable";
-import { Loader2, AlertCircle, RefreshCw, Layers } from "lucide-react";
+import { LogNetworkGraph } from "@/components/LogNetworkGraph";
+import { EvidenceDrawer } from "@/components/EvidenceDrawer";
+
+import {
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Network,
+  Terminal,
+} from "lucide-react";
 
 export default function DashboardPage() {
   const params = useParams();
@@ -36,29 +54,37 @@ export default function DashboardPage() {
   const sessionId = params.id as string;
 
   const [summary, setSummary] = useState<SessionSummary | null>(null);
+  const [analysis, setAnalysis] = useState<IncidentAnalysis | null>(null);
   const [timeline, setTimeline] = useState<TimelineBucket[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [graph, setGraph] = useState<CausalityGraph | null>(null);
-  const [incident, setIncident] = useState<IncidentReport | null>(null);
   const [sessionLogs, setSessionLogs] = useState<LogEntry[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<string | null>(null);
 
+  // Evidence Drawer state
+  const [isEvidenceDrawerOpen, setIsEvidenceDrawerOpen] = useState(false);
+  const [selectedEvidenceItem, setSelectedEvidenceItem] = useState<EvidenceItem | null>(null);
+  const [highlightedEvidenceId, setHighlightedEvidenceId] = useState<number | null>(null);
+
+  // Collapsed state for Advanced Log Pattern Graph
+  const [isPatternGraphOpen, setIsPatternGraphOpen] = useState(false);
+
   const loadCompletedData = useCallback(async (sid: string) => {
     try {
-      const [tl, anoms, grp, inc, logsData] = await Promise.all([
+      const [anlz, tl, anoms, grp, logsData] = await Promise.all([
+        getIncidentAnalysis(sid).catch(() => null),
         getTimeline(sid).catch(() => []),
         getAnomalies(sid).catch(() => []),
         getCausalityGraph(sid).catch(() => ({ nodes: [], edges: [] })),
-        getIncidentReport(sid).catch(() => null),
         getSessionLogs(sid, undefined, undefined, 2000, 0).catch(() => ({ total: 0, logs: [] })),
       ]);
+      setAnalysis(anlz);
       setTimeline(tl);
       setAnomalies(anoms);
       setGraph(grp);
-      setIncident(inc);
       setSessionLogs(logsData.logs || []);
       setIsLoading(false);
     } catch (err: any) {
@@ -104,6 +130,36 @@ export default function DashboardPage() {
     };
   }, [sessionId, loadCompletedData]);
 
+  // Handle opening evidence item in drawer
+  const handleOpenEvidence = (evidenceId: number) => {
+    if (!analysis) return;
+    const found = analysis.evidence.find((e) => e.id === evidenceId);
+    if (found) {
+      setSelectedEvidenceItem(found);
+      setIsEvidenceDrawerOpen(true);
+    }
+  };
+
+  // Jump from evidence drawer to table
+  const handleJumpToTable = (evidenceId: number, service: string) => {
+    setHighlightedEvidenceId(evidenceId);
+    setSelectedService(service);
+    const tableEl = document.getElementById("logs-table-section");
+    if (tableEl) {
+      tableEl.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  // Handle dependency topology updates
+  const handleUpdateDependencies = async (dependencies: DependencyEdge[]) => {
+    try {
+      const updated = await updateSessionDependencies(sessionId, dependencies);
+      setAnalysis(updated);
+    } catch (err) {
+      console.error("Failed to update dependencies:", err);
+    }
+  };
+
   // Loading / Processing Progress Screen
   if (isLoading && (!summary || summary.status === "processing")) {
     const progress = summary?.progress || 10;
@@ -118,7 +174,7 @@ export default function DashboardPage() {
           </div>
 
           <h2 className="text-xl font-bold text-white tracking-tight">
-            AI Normalization & Diagnostic Pipeline
+            Deterministic Analysis & Diagnostics Pipeline
           </h2>
           <p className="mt-1 text-xs text-slate-400">
             {summary?.message || "Ingesting and parsing multi-format log files..."}
@@ -143,13 +199,13 @@ export default function DashboardPage() {
               <span className={progress >= 20 ? "text-emerald-400 font-bold" : ""}>✓</span> Format Discovery
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={progress >= 40 ? "text-emerald-400 font-bold" : ""}>✓</span> Drain3 Templates
+              <span className={progress >= 40 ? "text-emerald-400 font-bold" : ""}>✓</span> Template Patterns
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={progress >= 70 ? "text-emerald-400 font-bold" : ""}>✓</span> Z-Score Anomalies
+              <span className={progress >= 70 ? "text-emerald-400 font-bold" : ""}>✓</span> Statistical Anomalies
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={progress >= 90 ? "text-emerald-400 font-bold" : ""}>✓</span> Gemma Root Cause
+              <span className={progress >= 90 ? "text-emerald-400 font-bold" : ""}>✓</span> Root Cause Discovery
             </div>
           </div>
         </main>
@@ -195,13 +251,33 @@ export default function DashboardPage() {
       <Navbar sessionId={sessionId} />
 
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
-        {/* Top Summary Cards */}
+        {/* 1. Top Summary Cards (with Tooltips & Quality Warnings) */}
         {summary && <SummaryCards summary={summary} />}
 
-        {/* AI Root Cause Incident Panel */}
-        <IncidentReportPanel incident={incident} />
+        {/* 2. INCIDENT STORY CARD (Deterministic Facts + Clickable [E#] Citations) */}
+        <IncidentStoryCard
+          analysis={analysis}
+          onOpenEvidence={handleOpenEvidence}
+        />
 
-        {/* Middle Row: Service Breakdown & Error Heatmap */}
+        {/* 3. SERVICE FLOW DIAGRAM WITH TIME SLIDER & TOPOLOGY EDITOR */}
+        {analysis && (
+          <ServiceFlow
+            analysis={analysis}
+            onOpenEvidence={handleOpenEvidence}
+            onUpdateDependencies={handleUpdateDependencies}
+          />
+        )}
+
+        {/* 4. INCIDENT SWIMLANE TIMELINE (Who Broke First Visual) */}
+        {analysis && (
+          <SwimlaneTimeline
+            analysis={analysis}
+            onOpenEvidence={handleOpenEvidence}
+          />
+        )}
+
+        {/* 5. Middle Row: Service Logs Breakdown & Error Density Heatmap */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ServiceLogsChart
             logs={sessionLogs}
@@ -220,7 +296,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stacked Timeline Chart */}
+        {/* 6. Stacked Timeline Volume Chart */}
         {summary && (
           <TimelineChart
             timeline={timeline}
@@ -231,29 +307,71 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Bottom Row: Anomaly List & Copilot Chat */}
+        {/* 7. Bottom Row: Grouped Anomaly List & Copilot Chat */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <AnomalyList
             anomalies={anomalies}
             selectedService={selectedService}
             onSelectService={setSelectedService}
+            onOpenEvidence={handleOpenEvidence}
           />
 
           <ChatBox sessionId={sessionId} />
         </div>
 
-        {/* Canonical Normalized Log Table */}
+        {/* 8. Collapsible Section: Advanced Log Pattern Graph (Old Hairball, Collapsed by Default) */}
+        <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4">
+          <button
+            onClick={() => setIsPatternGraphOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between text-left text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Network className="h-4 w-4 text-rose-400" />
+              <span>Advanced: Log Pattern Graph (Fine-Grained Transitions)</span>
+              <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
+                Optional Deep Dive
+              </span>
+            </div>
+            {isPatternGraphOpen ? (
+              <ChevronUp className="h-4 w-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-slate-400" />
+            )}
+          </button>
+
+          {isPatternGraphOpen && graph && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80">
+              <LogNetworkGraph
+                graph={graph}
+                selectedService={selectedService}
+                onSelectService={setSelectedService}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 9. Canonical Normalized Log Table (with Evidence Highlight) */}
         {summary && (
           <LogTable
             sessionId={sessionId}
             selectedService={selectedService}
             services={summary.services}
+            highlightedEvidenceId={highlightedEvidenceId}
+            onClearHighlight={() => setHighlightedEvidenceId(null)}
           />
         )}
       </main>
 
+      {/* Persistent Evidence Drawer */}
+      <EvidenceDrawer
+        isOpen={isEvidenceDrawerOpen}
+        onClose={() => setIsEvidenceDrawerOpen(false)}
+        evidenceItem={selectedEvidenceItem}
+        onJumpToTable={handleJumpToTable}
+      />
+
       <footer className="border-t border-slate-800/60 py-6 text-center text-xs text-slate-500">
-        LogLens MVP — Format-agnostic AI log intelligence platform.
+        LogLens — Evidence-Backed AI Incident Intelligence Platform.
       </footer>
     </div>
   );

@@ -7,8 +7,9 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 GEMMA_API_KEY = os.getenv("GEMMA_API_KEY", "")
-GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma-3-27b-it")
+GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "")
+LLM_MOCK = os.getenv("LLM_MOCK", "0").strip()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")

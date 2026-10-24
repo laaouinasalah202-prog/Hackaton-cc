@@ -23,6 +23,8 @@ class SessionData:
         self.anomalies: List[Anomaly] = []
         self.graph: CausalityGraph = CausalityGraph()
         self.incident_report: Optional[IncidentReport] = None
+        self.incident_analysis: Optional[Any] = None
+        self.user_dependencies: List[Dict[str, Any]] = []
         self.timeline: List[TimelineBucket] = []
 
     def to_dict(self) -> Dict[str, Any]:
@@ -32,15 +34,15 @@ class SessionData:
             "entries_count": len(self.entries),
             "anomalies": [a.model_dump() for a in self.anomalies],
             "graph": self.graph.model_dump(),
-            "incident_report": self.incident_report.model_dump()
-            if self.incident_report
-            else None,
+            "incident_report": self.incident_report.model_dump() if self.incident_report else None,
+            "incident_analysis": self.incident_analysis.model_dump() if (self.incident_analysis and hasattr(self.incident_analysis, "model_dump")) else self.incident_analysis,
+            "user_dependencies": self.user_dependencies,
             "timeline": [t.model_dump() for t in self.timeline],
         }
 
 
 class SessionStore:
-    """In-memory session manager with filesystem persistence."""
+    """In-memory session manager with filesystem persistence (JSON metadata + JSONL entries)."""
 
     def __init__(self):
         self._sessions: Dict[str, SessionData] = {}
@@ -69,6 +71,22 @@ class SessionStore:
                     sess.timeline = [
                         TimelineBucket(**t) for t in data.get("timeline", [])
                     ]
+                    sess.incident_analysis = data.get("incident_analysis")
+                    sess.user_dependencies = data.get("user_dependencies", [])
+
+                    # Reload entries from jsonl
+                    entries_file = STORAGE_DIR / f"{session_id}_entries.jsonl"
+                    if entries_file.exists():
+                        loaded_entries = []
+                        with open(entries_file, "r", encoding="utf-8") as ef:
+                            for line in ef:
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        loaded_entries.append(LogEntry(**json.loads(line)))
+                                    except Exception:
+                                        pass
+                        sess.entries = loaded_entries
                     self._sessions[session_id] = sess
                     return sess
             except Exception as e:
@@ -81,9 +99,16 @@ class SessionStore:
         if not sess:
             return
         filepath = STORAGE_DIR / f"{session_id}.json"
+        entries_file = STORAGE_DIR / f"{session_id}_entries.jsonl"
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(sess.to_dict(), f, indent=2)
+
+            # Persist entries in compact JSONL format
+            if sess.entries:
+                with open(entries_file, "w", encoding="utf-8") as ef:
+                    for entry in sess.entries:
+                        ef.write(entry.model_dump_json() + "\n")
         except Exception as e:
             logger.error(f"Failed to persist session {session_id}: {e}")
 

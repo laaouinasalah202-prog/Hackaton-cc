@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from backend.models import (
-    LogEntry, SessionSummary, Anomaly, CausalityGraph, IncidentReport, TimelineBucket
+    LogEntry, SessionSummary, Anomaly, CausalityGraph, IncidentReport, TimelineBucket, IncidentAnalysis
 )
 from backend.session_store import store, SessionData
 from backend.pipeline.ingest import ingest_file_content
@@ -15,7 +15,8 @@ from backend.pipeline.templates import LogTemplateExtractor
 from backend.pipeline.embed_cluster import cluster_templates
 from backend.pipeline.anomaly import detect_anomalies
 from backend.pipeline.causality import build_causality_graph
-from backend.pipeline.llm_analysis import generate_incident_report, explain_anomaly
+from backend.pipeline.incident_analysis import analyze_incident
+from backend.pipeline.llm_analysis import generate_incident_report, explain_anomaly, narrate_incident, generate_anomaly_title
 
 logger = logging.getLogger("coordinator")
 
@@ -132,10 +133,12 @@ def run_session_analysis(
             store.save_to_disk(session_id)
             return
 
-        # Sort all entries chronologically
+        # Sort all entries chronologically (handling unparseable timestamps safely)
         summary.progress = 30
         summary.message = "Sorting and normalizing timestamps..."
-        all_entries.sort(key=lambda e: e.ts)
+        all_entries.sort(key=lambda e: (0 if e.ts else 1, e.ts or ""))
+        unparsed_count = sum(1 for e in all_entries if e.ts is None)
+        summary.unparsed_timestamps = unparsed_count
 
         # Step 4: Drain3 template mining
         summary.progress = 40
@@ -149,11 +152,23 @@ def run_session_analysis(
         all_entries, _ = cluster_templates(all_entries)
 
         # Step 6: Anomaly detection
-        summary.progress = 70
+        summary.progress = 65
         summary.message = "Detecting spikes and anomalies..."
         anomalies = detect_anomalies(all_entries)
+        for a in anomalies:
+            a.explanation = generate_anomaly_title(a)
 
-        # Step 7: Causality graph
+        # Step 7: Deterministic incident analysis (facts & root cause computed by code)
+        summary.progress = 75
+        summary.message = "Computing deterministic incident root cause & onset timeline..."
+        analysis = analyze_incident(
+            session_id=session_id,
+            entries=all_entries,
+            anomalies=anomalies,
+            user_dependencies=sess.user_dependencies
+        )
+
+        # Step 8: Causality graph
         summary.progress = 80
         summary.message = "Building causality directed graph..."
         graph = build_causality_graph(all_entries, anomalies)
@@ -167,6 +182,7 @@ def run_session_analysis(
         err_count = level_counts.get("ERROR", 0) + level_counts.get("CRITICAL", 0)
         err_rate = (err_count / total_logs) if total_logs > 0 else 0.0
 
+        valid_ts = [e.ts for e in all_entries if e.ts]
         summary.total_logs = total_logs
         summary.services = sorted(list(services_set))
         summary.detected_formats = detected_formats
@@ -174,40 +190,42 @@ def run_session_analysis(
         summary.error_rate = round(err_rate, 4)
         summary.anomaly_count = len(anomalies)
         summary.time_range = {
-            "start": all_entries[0].ts if all_entries else None,
-            "end": all_entries[-1].ts if all_entries else None,
+            "start": valid_ts[0] if valid_ts else None,
+            "end": valid_ts[-1] if valid_ts else None,
         }
 
-        # Step 8: Timeline buckets
+        # Step 9: Timeline buckets
         summary.progress = 85
         summary.message = "Generating timeline distribution..."
         timeline = build_timeline_buckets(all_entries, anomalies)
 
-        # Step 9: LLM root cause analysis & incident report
+        # Step 10: AI Narration of computed facts
         summary.progress = 90
-        summary.message = "Running Gemma AI root cause analysis..."
-        error_entries = [e for e in all_entries if e.level in ("ERROR", "CRITICAL")]
-        incident_report = generate_incident_report(summary, anomalies, graph, error_entries)
+        summary.message = "Synthesizing AI narration of computed facts..."
+        analysis = narrate_incident(analysis)
 
-        # Generate explanations for top anomaly
-        for a in anomalies[:1]:
-            if not a.explanation or "Observed" in a.explanation or "Traffic spike" in a.explanation:
-                try:
-                    a.explanation = explain_anomaly(a)
-                except Exception:
-                    pass
+        incident_report = IncidentReport(
+            root_cause=analysis.root_cause_service,
+            summary=analysis.what_happened,
+            affected_services=analysis.propagation_path or summary.services,
+            timeline_summary=f"Incident escalated over {analysis.time_to_full_outage}",
+            suggested_fix=analysis.suggested_actions[0].action if analysis.suggested_actions else "Inspect root cause service logs",
+            severity="CRITICAL" if summary.error_rate > 0.2 else "HIGH"
+        )
 
         # Commit to session data
         sess.entries = all_entries
         sess.anomalies = anomalies
         sess.graph = graph
         sess.incident_report = incident_report
+        sess.incident_analysis = analysis
         sess.timeline = timeline
 
         summary.status = "completed"
         summary.progress = 100
         summary.message = "Analysis completed successfully."
         store.save_to_disk(session_id)
+        logger.info(f"Session {session_id} analysis complete. Root cause: {analysis.root_cause_service} (confidence={analysis.confidence:.2f}). {total_logs} logs, {len(anomalies)} anomalies.")
         logger.info(f"Session {session_id} analysis complete. {total_logs} logs, {len(anomalies)} anomalies.")
 
     except Exception as e:

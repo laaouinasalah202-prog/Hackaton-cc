@@ -97,6 +97,9 @@ export function TimelineChart({
           <p className="text-xs text-slate-400 mt-0.5">
             Synchronized event distribution across time buckets with anomaly spikes.
           </p>
+          <p className="text-[11px] text-slate-400 mt-0.5 italic">
+            How to read this: Stacked bars indicate request volumes by service or severity level. Red dots mark moments with detected failure spikes.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">

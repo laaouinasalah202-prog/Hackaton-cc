@@ -8,10 +8,11 @@ from backend.models import LogEntry
 UUID_REGEX = re.compile(r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b')
 IP_REGEX = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?::\d+)?\b')
 HEX_REGEX = re.compile(r'\b0x[0-9a-fA-F]+\b')
-NUM_REGEX = re.compile(r'\b\d+\b')
+# Mask numbers, but preserve numbers right after '->' or 'HTTP/' and 3-digit HTTP status codes (100-599)
+NUM_PRE_MASK_REGEX = re.compile(r'(?<!->\s)(?<!->)(?<!HTTP/)(?<!HTTP/\d\.)\b(?![1-5]\d{2}\b)\d+\b')
 
 def pre_mask_message(message: str) -> str:
-    """Mask UUIDs, IPs, Hex, and numbers to assist Drain3 in finding precise templates."""
+    """Mask UUIDs, IPs, Hex, and numbers (preserving HTTP status codes & versions) to assist Drain3."""
     if not message:
         return ""
     # Single line for drain template extraction
@@ -19,7 +20,7 @@ def pre_mask_message(message: str) -> str:
     m = UUID_REGEX.sub("<UUID>", first_line)
     m = IP_REGEX.sub("<IP>", m)
     m = HEX_REGEX.sub("<HEX>", m)
-    m = NUM_REGEX.sub("<NUM>", m)
+    m = NUM_PRE_MASK_REGEX.sub("<NUM>", m)
     return m.strip()
 
 class LogTemplateExtractor:
@@ -39,14 +40,18 @@ class LogTemplateExtractor:
         for entry in entries:
             masked = pre_mask_message(entry.message)
             result = self.miner.add_log_message(masked)
-            cluster_id = str(result["cluster_id"])
+            raw_cluster_id = str(result["cluster_id"])
             template_str = result["template_mined"]
 
-            entry.template_id = cluster_id
+            # Include normalized level in template key so different severities never share a pattern
+            level = (entry.level or "INFO").upper()
+            template_key = f"{level}:{raw_cluster_id}"
+
+            entry.template_id = template_key
             entry.template_str = template_str
 
-            self.template_counts[cluster_id] = self.template_counts.get(cluster_id, 0) + 1
-            self.template_patterns[cluster_id] = template_str
+            self.template_counts[template_key] = self.template_counts.get(template_key, 0) + 1
+            self.template_patterns[template_key] = template_str
 
         return entries
 

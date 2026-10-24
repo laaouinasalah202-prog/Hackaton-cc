@@ -7,6 +7,12 @@ from backend import config
 
 logger = logging.getLogger("llm_client")
 
+class LLMUnavailable(Exception):
+    """Raised when the LLM service is unavailable, unconfigured, or fails."""
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
 def clean_json_response(raw_text: str) -> Optional[Dict[str, Any]]:
     """
     Safely extract and parse JSON from an LLM response string.
@@ -81,15 +87,22 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
     Generate a text completion for `prompt` using Gemma.
     Configured via GEMMA_API_KEY, GEMMA_MODEL, and optional LLM_BASE_URL in backend/.env.
     
-    If no key or endpoint is configured, returns an intelligent simulated response
-    so that tests and offline hackathon demos can run seamlessly.
+    If LLM_MOCK=1 is explicitly set in env, returns simulated response for offline testing.
+    Otherwise, on failure raises LLMUnavailable so callers can present truthful rule-based analysis.
     """
     api_key = config.GEMMA_API_KEY.strip()
-    model = config.GEMMA_MODEL.strip() or "gemma-3-27b-it"
+    model = config.GEMMA_MODEL.strip() or "gemma-4-26b-a4b-it"
     base_url = config.LLM_BASE_URL.strip()
+    is_mock = config.LLM_MOCK == "1"
+
+    # Explicit opt-in mock mode
+    if is_mock:
+        logger.info(f"LLM_MOCK=1 enabled. Returning simulated response for prompt size={len(prompt)} chars")
+        return _generate_mock_fallback(prompt)
 
     # Provider 1: Custom base URL (e.g. Ollama, local vLLM, OpenAI-compatible proxy)
     if base_url:
+        logger.info(f"LLM call: provider=custom_base_url, model={model}, prompt_size={len(prompt)} chars, url={base_url}")
         try:
             headers = {"Content-Type": "application/json"}
             if api_key:
@@ -102,24 +115,33 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": temperature,
                 }
-                with httpx.Client(timeout=12.0) as client:
+                with httpx.Client(timeout=30.0) as client:
                     resp = client.post(url, json=payload, headers=headers)
+                    logger.info(f"LLM call result: status={resp.status_code}")
                     resp.raise_for_status()
                     data = resp.json()
-                    return data["choices"][0]["message"]["content"]
+                    content = data["choices"][0]["message"]["content"]
+                    logger.info(f"LLM call success: output_size={len(content)} chars")
+                    return content
             else:
                 # Ollama format
                 url = f"{base_url.rstrip('/')}/api/generate"
                 payload = {"model": model, "prompt": prompt, "stream": False}
-                with httpx.Client(timeout=12.0) as client:
+                with httpx.Client(timeout=30.0) as client:
                     resp = client.post(url, json=payload, headers=headers)
+                    logger.info(f"LLM call result: status={resp.status_code}")
                     resp.raise_for_status()
-                    return resp.json().get("response", "")
+                    content = resp.json().get("response", "")
+                    logger.info(f"LLM call success: output_size={len(content)} chars")
+                    return content
         except Exception as e:
-            logger.warning(f"Error calling LLM via LLM_BASE_URL ({base_url}): {e}")
+            msg = f"LLM custom endpoint failed ({base_url}): {e}"
+            logger.warning(msg)
+            raise LLMUnavailable(msg)
 
-    # Provider 2: Google Generative AI API (Gemma / Gemini endpoint)
+    # Provider 2: Google Generative AI API (Gemma endpoint)
     if api_key:
+        logger.info(f"LLM call: provider=google_generative_ai, model={model}, prompt_size={len(prompt)} chars")
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             payload = {
@@ -130,25 +152,49 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
                 ],
                 "generationConfig": {
                     "temperature": temperature,
-                    "maxOutputTokens": 1024,
+                    "maxOutputTokens": 2500,
                 }
             }
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=60.0) as client:
                 resp = client.post(url, json=payload, headers={"Content-Type": "application/json"})
+                logger.info(f"LLM call result: status={resp.status_code}")
                 if resp.status_code == 200:
                     data = resp.json()
                     candidates = data.get("candidates", [])
                     if candidates:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
-                            return parts[0].get("text", "")
+                            non_thought_parts = [
+                                p.get("text", "") for p in parts if not p.get("thought", False)
+                            ]
+                            if non_thought_parts:
+                                res_text = "".join(non_thought_parts).strip()
+                                logger.info(f"LLM call success: output_size={len(res_text)} chars")
+                                return res_text
+                            text = parts[-1].get("text", "").strip()
+                            text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL)
+                            text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+                            res_text = text.strip()
+                            logger.info(f"LLM call success: output_size={len(res_text)} chars")
+                            return res_text
+                    msg = "Google API returned empty candidates."
+                    logger.warning(msg)
+                    raise LLMUnavailable(msg)
                 else:
-                    logger.warning(f"Google API returned HTTP {resp.status_code}: {resp.text}")
+                    msg = f"Google API HTTP {resp.status_code}: {resp.text[:120]}"
+                    logger.warning(msg)
+                    raise LLMUnavailable(msg)
+        except LLMUnavailable:
+            raise
         except Exception as e:
-            logger.warning(f"Error calling Google Gemma API: {e}")
+            msg = f"Google Gemma API request failed: {e}"
+            logger.warning(msg)
+            raise LLMUnavailable(msg)
 
-    # Provider 3: Fallback mock response for offline / hackathon testing
-    return _generate_mock_fallback(prompt)
+    # Missing API key and endpoint
+    msg = "GEMMA_API_KEY is not configured in backend/.env"
+    logger.info(msg)
+    raise LLMUnavailable(msg)
 
 def _generate_mock_fallback(prompt: str) -> str:
     """Intelligent fallback when LLM API key is not present or offline."""
@@ -161,27 +207,35 @@ def _generate_mock_fallback(prompt: str) -> str:
             "notes": "Standard bracketed timestamp and log level format"
         })
 
+    # Dynamic fallback grounded in the prompt context
+    # Extract services from prompt
+    services_match = re.search(r"Services(?:\s*involved)?:([^\n]+)", prompt, re.IGNORECASE)
+    services_str = services_match.group(1).strip() if services_match else "detected services"
+    services = [s.strip() for s in services_str.split(",") if s.strip()]
+    top_svc = services[0] if services else "primary service"
+    affected = services[:3] if len(services) >= 3 else services
+
     if "true root cause of the incident" in prompt_lower or "root_cause" in prompt_lower:
         return json.dumps({
-            "root_cause": "Database connection pool exhaustion and query lock timeouts in PostgreSQL",
-            "summary": "Database latency spiked causing connection timeouts in the API server, which rapidly cascaded to upstream gateway 502/504 gateway timeout errors.",
-            "affected_services": ["database", "api-server", "api-gateway"],
-            "timeline_summary": "1) DB active connections hit max threshold (100%). 2) API server failed to acquire pool connections. 3) API gateway returned 504 Gateway Timeout to end users.",
-            "suggested_fix": "Increase max_connections in postgresql.conf, scale PgBouncer connection pooler, and implement circuit breakers with retry backoff in the API server.",
-            "severity": "CRITICAL"
+            "root_cause": f"Severe error concentration and connection saturation in {top_svc}",
+            "summary": f"Service disruption detected originating in {top_svc}, causing cascading errors across {', '.join(affected)}.",
+            "affected_services": affected,
+            "timeline_summary": f"1) Error burst observed in {top_svc}. 2) Cascading failures propagated to dependent services {', '.join(services[1:3])}.",
+            "suggested_fix": f"Check logs and resource utilization for {top_svc}, adjust connection timeouts, and verify dependent endpoints.",
+            "severity": "HIGH"
         })
 
     if "explain why the following log anomaly is critical" in prompt_lower:
         return (
-            "This anomaly represents a critical downstream failure triggered by resource saturation. "
-            "The sudden spike in error logs indicates unhandled exception cascades across the request pipeline. "
-            "Inspect system telemetry and restart the affected component or clear blocked queues immediately."
+            f"Anomalous error frequency detected in {top_svc}. "
+            "This pattern indicates unhandled exceptions or connection starvation impacting request throughput. "
+            "Inspect system telemetry and check the recent error logs for this component."
         )
 
-    # Chat query
+    # Chat query fallback
     return (
-        "Based on the log analysis:\n\n"
-        "- **Root Cause**: Database resource contention precipitated connection pool timeouts.\n"
-        "- **Cascading Impact**: The API server was unable to fulfill requests, triggering 502/504 Bad Gateway responses at the ingress gateway.\n"
-        "- **Recommendation**: Verify connection pool parameters and query execution plans for slow queries."
+        f"Based on the log analysis for **{services_str}**:\n\n"
+        f"- **Primary Disruption**: Unusually high error volumes observed originating in `{top_svc}`.\n"
+        f"- **Impacted Components**: Cascading failure signals identified across {', '.join([f'`{s}`' for s in affected])}.\n"
+        f"- **Recommended Action**: Review recent error traces in `{top_svc}` and verify network/connection limits."
     )

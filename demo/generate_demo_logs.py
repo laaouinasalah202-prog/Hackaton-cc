@@ -45,9 +45,10 @@ def generate_demo_logs(start_time: datetime = None) -> dict[str, str]:
             db_lines.append(f"{db_ts} [1042] [INFO] [backend_db] LOG: checkpoint starting: time")
             db_lines.append(f"{db_ts} [1085] [INFO] [backend_db] LOG: duration: 4.120 ms  statement: SELECT id, status FROM orders WHERE user_id = {1000 + sec % 50}")
         else:
-            # Phase 1: DB slow queries & pool saturation
+            # Phase 1: DB slow queries & pool saturation (starts immediately at sec 600)
             if incident_phase < 60:
                 db_lines.append(f"{db_ts} [1099] [WARN] [backend_db] WARNING: slow query detected: duration: {8500 + incident_phase * 150} ms statement: SELECT * FROM transactions WHERE status = 'PENDING' FOR UPDATE")
+                db_lines.append(f"{db_ts} [1105] [CRITICAL] [backend_db] FATAL: remaining connection slots are reserved for non-replication superuser connections (active: 100/100)")
             elif incident_phase < 150:
                 db_lines.append(f"{db_ts} [1102] [ERROR] [backend_db] ERROR: lock timeout on relation 'orders_pkey' after 15000 ms")
                 db_lines.append(f"{db_ts} [1105] [CRITICAL] [backend_db] FATAL: remaining connection slots are reserved for non-replication superuser connections (active: 100/100)")

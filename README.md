@@ -121,6 +121,25 @@ Every line of incoming log data—regardless of originating vendor, framework, o
   }
 }
 ```
+Raw Logs ➔ Ingestion & Multi-Line Grouping ➔ Format Discovery ➔ Normalization & PII Redaction
+    ➔ Drain3 Template Mining ➔ Semantic Embeddings ➔ Onset & Anomaly Detection
+    ➔ Deterministic Root Cause Scoring ➔ LLM Narration with [E#] Citations
+```
+
+1. **Format-Agnostic Ingestion & PII Redaction**:
+   - Multi-line stack traces are stitched into single canonical log events.
+   - Credentials, passwords, bearer tokens, and emails are masked.
+2. **Deterministic Onset Detection**:
+   - Evaluates baseline error rates (first 30% of timeline or first 20 buckets).
+   - Computes robust threshold: `median + 4 * MAD` (minimum 10% error rate).
+   - Records the exact second when each service began failing.
+3. **Dependency Inference & Victim Demotion**:
+   - Analyzes error message signatures. Services emitting `502`, `504`, `upstream_response_time`, or `connection refused` are identified as downstream **clients/victims**.
+   - Services with internal engine failures (e.g. `FATAL: connection slots reserved`, `HikariPool exhausted`, slow query lock timeouts) receive origin bonuses.
+   - A downstream victim service reporting upstream errors can **never** rank as root cause if a dependency failed earlier.
+4. **Evidence-Backed Narration**:
+   - The LLM is provided structured computed facts (candidates, onsets, phases, dependencies, and evidence lines).
+   - Every claim is cited with clickable `[E#]` links connecting directly to raw log lines in the Evidence Drawer.
 
 ### Schema Definition
 
@@ -345,6 +364,7 @@ npm install
 
 # Start Next.js development server
 npm run dev
+# Open http://localhost:3000
 ```
 
 Next.js frontend runs at `http://localhost:3000`.

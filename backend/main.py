@@ -15,12 +15,15 @@ from backend.models import (
     ChatRequest,
     ChatResponse,
     AuthUser,
+    IncidentAnalysis,
+    DependencyUpdateRequest,
 )
 from backend.auth import GoogleAuthError, build_google_login_url, exchange_code_for_session, get_session, delete_session
 from backend.config import AUTH_COOKIE_SECURE, AUTH_SESSION_COOKIE, FRONTEND_URL, AUTH_SESSION_MAX_AGE
 from backend.session_store import store
 from backend.pipeline.coordinator import run_session_analysis
-from backend.pipeline.llm_analysis import answer_nl_query
+from backend.pipeline.incident_analysis import analyze_incident
+from backend.pipeline.llm_analysis import answer_nl_query, narrate_incident
 
 # Configure logging
 logging.basicConfig(
@@ -197,6 +200,33 @@ def get_incident(session_id: str):
         raise HTTPException(status_code=202, detail="Incident report still processing.")
     return sess.incident_report
 
+@app.get("/api/sessions/{session_id}/analysis", response_model=IncidentAnalysis)
+def get_analysis(session_id: str):
+    sess = store.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    if not sess.incident_analysis:
+        if sess.entries:
+            analysis = analyze_incident(session_id, sess.entries, sess.anomalies, user_dependencies=sess.user_dependencies)
+            analysis = narrate_incident(analysis)
+            sess.incident_analysis = analysis
+            store.save_to_disk(session_id)
+            return analysis
+        raise HTTPException(status_code=202, detail="Analysis still processing.")
+    return sess.incident_analysis
+
+@app.post("/api/sessions/{session_id}/dependencies", response_model=IncidentAnalysis)
+def update_dependencies(session_id: str, request: DependencyUpdateRequest):
+    sess = store.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    sess.user_dependencies = [d.model_dump() for d in request.dependencies]
+    # Re-run deterministic analysis with updated user dependencies
+    analysis = analyze_incident(session_id, sess.entries, sess.anomalies, user_dependencies=sess.user_dependencies)
+    analysis = narrate_incident(analysis)
+    sess.incident_analysis = analysis
+    store.save_to_disk(session_id)
+    return analysis
 
 @app.post("/api/sessions/{session_id}/chat", response_model=ChatResponse)
 def chat_with_session(session_id: str, request: ChatRequest):
@@ -211,6 +241,7 @@ def chat_with_session(session_id: str, request: ChatRequest):
         anomalies=sess.anomalies,
         graph=sess.graph,
         sample_errors=error_entries,
+        analysis=sess.incident_analysis
     )
 
 

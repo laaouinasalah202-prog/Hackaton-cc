@@ -3,15 +3,23 @@
 import { useState, useEffect } from "react";
 import { LogEntry } from "@/lib/types";
 import { getSessionLogs } from "@/lib/api";
-import { ListFilter, Search, Terminal, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ListFilter, Search, Terminal, ChevronLeft, ChevronRight, Loader2, X, Sparkles } from "lucide-react";
 
 interface Props {
   sessionId: string;
   selectedService: string | null;
   services: string[];
+  highlightedEvidenceId?: number | null;
+  onClearHighlight?: () => void;
 }
 
-export function LogTable({ sessionId, selectedService, services }: Props) {
+export function LogTable({
+  sessionId,
+  selectedService,
+  services,
+  highlightedEvidenceId,
+  onClearHighlight,
+}: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [levelFilter, setLevelFilter] = useState<string>("");
@@ -48,9 +56,10 @@ export function LogTable({ sessionId, selectedService, services }: Props) {
   }, [sessionId, selectedService, levelFilter, offset]);
 
   const filteredLogs = searchQuery
-    ? logs.filter((l) =>
-        l.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.source.toLowerCase().includes(searchQuery.toLowerCase())
+    ? logs.filter(
+        (l) =>
+          l.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.source.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : logs;
 
@@ -70,15 +79,36 @@ export function LogTable({ sessionId, selectedService, services }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-5 shadow-sm">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+    <div id="logs-table-section" className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-5 shadow-sm space-y-3">
+      {/* Highlight Notice Banner if opened from Evidence Drawer */}
+      {highlightedEvidenceId !== undefined && highlightedEvidenceId !== null && (
+        <div className="flex items-center justify-between rounded-lg bg-cyan-950/60 border border-cyan-800/80 px-3.5 py-2 text-xs text-cyan-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-cyan-400 shrink-0" />
+            <span>
+              Targeted Evidence Line <strong>[E{highlightedEvidenceId}]</strong> selected.
+            </span>
+          </div>
+          {onClearHighlight && (
+            <button
+              onClick={onClearHighlight}
+              className="flex items-center gap-1 rounded bg-cyan-900 px-2 py-0.5 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-800"
+            >
+              <X className="h-3 w-3" />
+              <span>Clear Highlight</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <Terminal className="h-4 w-4 text-indigo-400" />
-            Unified Schema Logs Explorer
+            Unified Canonical Logs Explorer
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Format-agnostic canonical representation ({total.toLocaleString()} total entries).
+            Normalized unified schema ({total.toLocaleString()} total entries).
           </p>
         </div>
 
@@ -118,7 +148,7 @@ export function LogTable({ sessionId, selectedService, services }: Props) {
               <th className="py-2.5 px-3">Timestamp (UTC ISO)</th>
               <th className="py-2.5 px-3">Service</th>
               <th className="py-2.5 px-3">Level</th>
-              <th className="py-2.5 px-3">Template</th>
+              <th className="py-2.5 px-3">Message Pattern</th>
               <th className="py-2.5 px-3 w-1/2">Message Payload</th>
             </tr>
           </thead>
@@ -137,34 +167,42 @@ export function LogTable({ sessionId, selectedService, services }: Props) {
                 </td>
               </tr>
             ) : (
-              filteredLogs.map((log, idx) => (
-                <tr
-                  key={idx}
-                  className="hover:bg-slate-900/60 transition-colors font-mono"
-                >
-                  <td className="py-2 px-3 text-slate-400 whitespace-nowrap text-[11px]">
-                    {log.ts}
-                  </td>
-                  <td className="py-2 px-3 font-semibold text-cyan-300 whitespace-nowrap">
-                    {log.source}
-                  </td>
-                  <td className="py-2 px-3 whitespace-nowrap">
-                    <span
-                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase border ${getLevelStyle(
-                        log.level
-                      )}`}
-                    >
-                      {log.level}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-slate-500 whitespace-nowrap text-[10px]">
-                    {log.template_id ? `#${log.template_id}` : "-"}
-                  </td>
-                  <td className="py-2 px-3 text-slate-200 break-words whitespace-pre-wrap leading-relaxed max-w-xl">
-                    {log.message}
-                  </td>
-                </tr>
-              ))
+              filteredLogs.map((log, idx) => {
+                const isTargetRow = highlightedEvidenceId !== undefined && offset + idx === highlightedEvidenceId;
+
+                return (
+                  <tr
+                    key={idx}
+                    className={`transition-colors font-mono ${
+                      isTargetRow
+                        ? "bg-cyan-950/60 ring-2 ring-cyan-500/80 font-bold"
+                        : "hover:bg-slate-900/60"
+                    }`}
+                  >
+                    <td className="py-2 px-3 text-slate-400 whitespace-nowrap text-[11px]">
+                      {log.ts || "N/A"}
+                    </td>
+                    <td className="py-2 px-3 font-semibold text-cyan-300 whitespace-nowrap">
+                      {log.source}
+                    </td>
+                    <td className="py-2 px-3 whitespace-nowrap">
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase border ${getLevelStyle(
+                          log.level
+                        )}`}
+                      >
+                        {log.level}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-slate-500 whitespace-nowrap text-[10px]">
+                      {log.template_id ? `#${log.template_id}` : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-slate-200 break-words whitespace-pre-wrap leading-relaxed max-w-xl">
+                      {log.message}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -173,7 +211,7 @@ export function LogTable({ sessionId, selectedService, services }: Props) {
       {/* Pagination Controls */}
       <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
         <span>
-          Showing {offset + 1}–{Math.min(offset + limit, total)} of {total}
+          Showing {total > 0 ? offset + 1 : 0}–{Math.min(offset + limit, total)} of {total}
         </span>
         <div className="flex items-center gap-1.5">
           <button

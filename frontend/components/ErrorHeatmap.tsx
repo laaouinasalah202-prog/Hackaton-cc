@@ -47,6 +47,9 @@ export function ErrorHeatmap({ timeline, services, onSelectService, selectedServ
           <p className="text-xs text-slate-400 mt-0.5">
             Synchronized service fault intensity over chronological time windows.
           </p>
+          <p className="text-[11px] text-slate-400 mt-0.5 italic">
+            How to read this: Each cell represents error volume for a service at that time. Brighter red cells indicate concentrated failure periods.
+          </p>
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-slate-400">

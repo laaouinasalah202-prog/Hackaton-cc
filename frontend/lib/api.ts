@@ -6,7 +6,9 @@ import {
   IncidentReport,
   ChatResponse,
   LogEntry,
-  AuthUser
+  AuthUser,
+  IncidentAnalysis,
+  DependencyEdge
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -130,5 +132,27 @@ export async function getSessionLogs(
     cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to load logs");
+  return res.json();
+}
+
+export async function getIncidentAnalysis(sessionId: string): Promise<IncidentAnalysis | null> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/analysis`, {
+    cache: "no-store",
+  });
+  if (res.status === 202) return null;
+  if (!res.ok) throw new Error("Failed to load incident analysis");
+  return res.json();
+}
+
+export async function updateSessionDependencies(
+  sessionId: string,
+  dependencies: DependencyEdge[]
+): Promise<IncidentAnalysis> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/dependencies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dependencies }),
+  });
+  if (!res.ok) throw new Error("Failed to update dependencies");
   return res.json();
 }
