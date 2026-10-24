@@ -10,20 +10,26 @@ logger = logging.getLogger("llm_client")
 def clean_json_response(raw_text: str) -> Optional[Dict[str, Any]]:
     """
     Safely extract and parse JSON from an LLM response string.
-    Strips markdown code fences, leading/trailing non-json noise.
+    Strips markdown code fences, thinking tags, and leading/trailing non-json noise.
     """
     if not raw_text:
         return None
 
     cleaned = raw_text.strip()
     
+    # Strip thinking tags like <thought>...</thought> or <thinking>...</thinking>
+    cleaned = re.sub(r'<thought>.*?</thought>', '', cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r'<thinking>.*?</thinking>', '', cleaned, flags=re.DOTALL)
+    
     # Strip markdown code blocks ```json ... ``` or ``` ... ```
-    if cleaned.startswith("```"):
-        # Remove opening fence
-        cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
-        # Remove closing fence
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        cleaned = cleaned.strip()
+    fence_matches = re.findall(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned, flags=re.IGNORECASE)
+    for fence in fence_matches:
+        try:
+            parsed = json.loads(fence.strip())
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
 
     # Find the outermost balanced braces
     start_idx = cleaned.find("{")
@@ -32,19 +38,43 @@ def clean_json_response(raw_text: str) -> Optional[Dict[str, Any]]:
     if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
         candidate = cleaned[start_idx:end_idx + 1]
         try:
-            return json.loads(candidate)
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
         except Exception:
             # Try basic fixes for trailing commas
             fixed = re.sub(r',\s*([}\]])', r'\1', candidate)
             try:
-                return json.loads(fixed)
+                parsed = json.loads(fixed)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+
+    # Regex search for any valid JSON object within the text
+    json_candidates = re.findall(r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}', cleaned)
+    for cand in json_candidates:
+        try:
+            parsed = json.loads(cand)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            try:
+                fixed = re.sub(r',\s*([}\]])', r'\1', cand)
+                parsed = json.loads(fixed)
+                if isinstance(parsed, dict):
+                    return parsed
             except Exception:
                 pass
 
     try:
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
     except Exception:
-        return None
+        pass
+
+    return None
 
 def generate(prompt: str, temperature: float = 0.2) -> str:
     """
@@ -72,7 +102,7 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": temperature,
                 }
-                with httpx.Client(timeout=30.0) as client:
+                with httpx.Client(timeout=12.0) as client:
                     resp = client.post(url, json=payload, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
@@ -81,7 +111,7 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
                 # Ollama format
                 url = f"{base_url.rstrip('/')}/api/generate"
                 payload = {"model": model, "prompt": prompt, "stream": False}
-                with httpx.Client(timeout=30.0) as client:
+                with httpx.Client(timeout=12.0) as client:
                     resp = client.post(url, json=payload, headers=headers)
                     resp.raise_for_status()
                     return resp.json().get("response", "")
@@ -103,7 +133,7 @@ def generate(prompt: str, temperature: float = 0.2) -> str:
                     "maxOutputTokens": 1024,
                 }
             }
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=12.0) as client:
                 resp = client.post(url, json=payload, headers={"Content-Type": "application/json"})
                 if resp.status_code == 200:
                     data = resp.json()

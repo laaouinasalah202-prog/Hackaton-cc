@@ -49,7 +49,29 @@ def build_causality_graph(
                 "service": a.service
             })
 
-    df = pd.DataFrame(error_records).dropna(subset=["ts"]).sort_values("ts")
+    # Construct nodes for all services
+    nodes = [
+        CausalityNode(
+            id=svc,
+            name=svc,
+            error_count=service_errors.get(svc, 0),
+            anomaly_count=service_anomalies.get(svc, 0),
+            type="service"
+        )
+        for svc in all_services
+    ]
+
+    # If no errors or anomalies were found, return nodes with empty edges
+    if not error_records:
+        return CausalityGraph(nodes=nodes, edges=[])
+
+    df = pd.DataFrame(error_records)
+    if "ts" not in df.columns or df.empty:
+        return CausalityGraph(nodes=nodes, edges=[])
+
+    df = df.dropna(subset=["ts"]).sort_values("ts")
+    if df.empty:
+        return CausalityGraph(nodes=nodes, edges=[])
 
     # Time-window aggregation: detect error bursts per service
     # 5-second burst windows

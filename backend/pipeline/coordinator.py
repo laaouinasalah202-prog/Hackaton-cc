@@ -33,7 +33,14 @@ def build_timeline_buckets(entries: List[LogEntry], anomalies: List[Anomaly], nu
             "cluster_id": str(e.cluster_id if e.cluster_id is not None else 0),
         })
 
-    df = pd.DataFrame(data).dropna(subset=["ts"]).sort_values("ts")
+    if not data:
+        return []
+
+    df = pd.DataFrame(data)
+    if "ts" not in df.columns or df.empty:
+        return []
+
+    df = df.dropna(subset=["ts"]).sort_values("ts")
     if df.empty:
         return []
 
@@ -182,8 +189,8 @@ def run_session_analysis(
         error_entries = [e for e in all_entries if e.level in ("ERROR", "CRITICAL")]
         incident_report = generate_incident_report(summary, anomalies, graph, error_entries)
 
-        # Generate explanations for top anomalies
-        for a in anomalies[:6]:
+        # Generate explanations for top anomaly
+        for a in anomalies[:1]:
             if not a.explanation or "Observed" in a.explanation or "Traffic spike" in a.explanation:
                 try:
                     a.explanation = explain_anomaly(a)

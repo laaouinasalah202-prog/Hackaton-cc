@@ -32,7 +32,14 @@ def detect_anomalies(
             "template_str": e.template_str or e.message[:80],
         })
 
-    df = pd.DataFrame(data).dropna(subset=["ts"])
+    if not data:
+        return []
+
+    df = pd.DataFrame(data)
+    if "ts" not in df.columns or df.empty:
+        return []
+
+    df = df.dropna(subset=["ts"])
     if df.empty:
         return []
 
