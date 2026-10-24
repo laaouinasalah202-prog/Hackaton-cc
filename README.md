@@ -325,7 +325,8 @@ AUTH_SESSION_MAX_AGE=604800
 
 - **Python**: 3.10+ (Python 3.11 recommended)
 - **Node.js**: 18+ (Node.js 20 LTS recommended)
-- **Package Managers**: `pip` (or `uv`) and `npm`
+- **[uv](https://docs.astral.sh/uv/)**: Python package manager (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- **npm** and **make**
 
 ### 1. Clone the Repository
 
@@ -334,40 +335,49 @@ git clone https://github.com/laaouinasalah202-prog/loglens.git
 cd loglens
 ```
 
-### 2. Backend Setup
+### 2. Configure Environment (optional)
+
+Copy the example file and fill in your keys. If you skip this, LogLens uses the mock LLM fallback.
 
 ```bash
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r backend/requirements.txt
-# (Optional for semantic vector embeddings):
-pip install sentence-transformers
-
-# Configure environment
 cp backend/.env.example backend/.env
-
-# Start FastAPI server
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-FastAPI server runs at `http://localhost:8000`.  
-Interactive documentation available at `http://localhost:8000/docs`.
-
-### 3. Frontend Setup
+### 3. Install & Run with Make
 
 ```bash
-cd frontend
-npm install
-
-# Start Next.js development server
-npm run dev
-# Open http://localhost:3000
+make install   # install backend (uv sync) and frontend (npm install) dependencies
+make dev       # run backend AND frontend together (Ctrl+C stops both)
 ```
 
-Next.js frontend runs at `http://localhost:3000`.
+Or do both in one step on a fresh clone:
+
+```bash
+make start
+```
+
+| Service | URL |
+|---|---|
+| Frontend (Next.js) | `http://localhost:3000` |
+| Backend (FastAPI) | `http://localhost:8000` |
+| Interactive API docs | `http://localhost:8000/docs` |
+
+### Available Make Commands
+
+| Command | Description |
+|---|---|
+| `make help` | List all available commands. |
+| `make install` | Install backend and frontend dependencies. |
+| `make install-backend` | Install Python dependencies with `uv sync` (creates `.venv`). |
+| `make install-frontend` | Install frontend npm dependencies. |
+| `make dev` | Run backend and frontend together. |
+| `make backend` | Run only the FastAPI backend on port 8000 (hot reload). |
+| `make frontend` | Run only the Next.js frontend on port 3000. |
+| `make start` | First-time setup: install everything, then run both. |
+| `make build` | Create a production build of the frontend. |
+| `make clean` | Remove `.venv`, `node_modules` and build artifacts. |
+
+To use a different backend port: `make dev BACKEND_PORT=9000`.
 
 ---
 
@@ -418,6 +428,7 @@ Next.js frontend runs at `http://localhost:3000`.
 │   │   └── types.ts             # TypeScript interfaces matching backend models
 │   ├── package.json             # Frontend dependencies & scripts
 │   └── tailwind.config.js       # Tailwind CSS design system configuration
+├── Makefile                     # One-command install & run (make install / make dev)
 └── README.md                    # Comprehensive documentation
 ```
 
