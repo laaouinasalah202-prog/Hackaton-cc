@@ -25,6 +25,18 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
     } catch {
       // Ignore
     }
+import { getCurrentUser, GOOGLE_LOGIN_URL, logout } from "@/lib/api";
+import { AuthUser } from "@/lib/types";
+
+export function Navbar({ sessionId }: { sessionId?: string }) {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+  }, []);
+
+  const handleLogout = async () => {
+    await logout().catch(() => undefined);
     setCurrentUser(null);
     if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
       window.location.href = "/login";
@@ -91,6 +103,7 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
             <div className="flex items-center gap-2">
               <Link
                 href="/login"
+                href={GOOGLE_LOGIN_URL}
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800/80 hover:text-white transition-colors"
               >
                 <LogIn className="h-3.5 w-3.5 text-indigo-400" />
@@ -98,6 +111,7 @@ export function Navbar({ sessionId }: { sessionId?: string }) {
               </Link>
               <Link
                 href="/register"
+                href={GOOGLE_LOGIN_URL}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-1.5 font-medium text-white shadow-md shadow-indigo-600/20 hover:from-indigo-500 hover:to-cyan-500 transition-all"
               >
                 <UserPlus className="h-3.5 w-3.5" />

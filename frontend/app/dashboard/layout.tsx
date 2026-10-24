@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { getCurrentUser } from "@/lib/api";
 
 export default function DashboardLayout({
   children,
@@ -33,6 +34,19 @@ export default function DashboardLayout({
       setIsAuthenticated(false);
       window.location.replace("/login");
     }
+    getCurrentUser()
+      .then((user) => {
+        if (!user) {
+          const currentPath = window.location.pathname || "/dashboard";
+          window.location.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+          return;
+        }
+        setIsAuthenticated(true);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        window.location.replace("/login");
+      });
   }, []);
 
   if (isAuthenticated !== true) {

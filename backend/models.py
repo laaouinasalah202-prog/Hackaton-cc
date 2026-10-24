@@ -2,6 +2,13 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
+class AuthUser(BaseModel):
+    sub: str
+    email: str
+    name: str = ""
+    picture: Optional[str] = None
+    email_verified: bool = False
+
 class LogEntry(BaseModel):
     ts: str = Field(description="ISO 8601 UTC timestamp")
     source: str = Field(description="Service name or file source")
