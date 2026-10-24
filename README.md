@@ -41,7 +41,8 @@ LogLens was designed and built by:
 - **Enterprise Google OAuth 2.0**: Secure authentication flow with HttpOnly session cookies, state validation, and profile management.
 
 ---
-
+## video of the platform 
+[View the project file on Google Drive](https://drive.google.com/file/d/1U3eWaPy0no5Uc3PXtJimBQLJHWswMGE-/view?usp=sharing)
 ## 🏛️ System Architecture
 
 ```mermaid
