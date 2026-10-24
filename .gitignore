@@ -1,0 +1,22 @@
+# Environments
+.env
+.env.local
+.venv
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Storage / Sessions
+backend/storage/
+*.sqlite
+*.db
+
+# Logs & temp
+*.log
+.DS_Store
