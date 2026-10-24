@@ -181,24 +181,7 @@ export default function HomePage() {
             )}
 
             {/* Proof Badges */}
-            <div className="pt-6 flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-400 max-w-3xl mx-auto">
-              <span className="rounded-full bg-slate-900/90 border border-slate-800 px-3 py-1 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                Zero bespoke parsers
-              </span>
-              <span className="rounded-full bg-slate-900/90 border border-slate-800 px-3 py-1 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                Deterministic onset engine (median + 4&times;MAD)
-              </span>
-              <span className="rounded-full bg-slate-900/90 border border-slate-800 px-3 py-1 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                Victim demotion (502/504 ingress)
-              </span>
-              <span className="rounded-full bg-slate-900/90 border border-slate-800 px-3 py-1 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                Evidence citations [E#]
-              </span>
-            </div>
+ 
           </div>
         </section>
 
