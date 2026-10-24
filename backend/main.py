@@ -6,8 +6,6 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTa
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.models import (
-    UploadResponse, SessionSummary, TimelineBucket, Anomaly,
-    CausalityGraph, IncidentReport, ChatRequest, ChatResponse, AuthUser
     UploadResponse,
     SessionSummary,
     TimelineBucket,
@@ -16,6 +14,7 @@ from backend.models import (
     IncidentReport,
     ChatRequest,
     ChatResponse,
+    AuthUser,
 )
 from backend.auth import GoogleAuthError, build_google_login_url, exchange_code_for_session, get_session, delete_session
 from backend.config import AUTH_COOKIE_SECURE, AUTH_SESSION_COOKIE, FRONTEND_URL, AUTH_SESSION_MAX_AGE
