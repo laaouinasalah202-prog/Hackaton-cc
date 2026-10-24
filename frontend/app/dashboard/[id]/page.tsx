@@ -8,6 +8,7 @@ import {
   getAnomalies,
   getCausalityGraph,
   getIncidentReport,
+  getSessionLogs,
 } from "@/lib/api";
 import {
   SessionSummary,
@@ -15,13 +16,14 @@ import {
   Anomaly,
   CausalityGraph,
   IncidentReport,
+  LogEntry,
 } from "@/lib/types";
 
 import { Navbar } from "@/components/Navbar";
 import { SummaryCards } from "@/components/SummaryCards";
 import { TimelineChart } from "@/components/TimelineChart";
 import { ErrorHeatmap } from "@/components/ErrorHeatmap";
-import { CausalityGraphView } from "@/components/CausalityGraphView";
+import { ServiceLogsChart } from "@/components/ServiceLogsChart";
 import { IncidentReportPanel } from "@/components/IncidentReportPanel";
 import { AnomalyList } from "@/components/AnomalyList";
 import { ChatBox } from "@/components/ChatBox";
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [graph, setGraph] = useState<CausalityGraph | null>(null);
   const [incident, setIncident] = useState<IncidentReport | null>(null);
+  const [sessionLogs, setSessionLogs] = useState<LogEntry[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +48,18 @@ export default function DashboardPage() {
 
   const loadCompletedData = useCallback(async (sid: string) => {
     try {
-      const [tl, anoms, grp, inc] = await Promise.all([
+      const [tl, anoms, grp, inc, logsData] = await Promise.all([
         getTimeline(sid).catch(() => []),
         getAnomalies(sid).catch(() => []),
         getCausalityGraph(sid).catch(() => ({ nodes: [], edges: [] })),
         getIncidentReport(sid).catch(() => null),
+        getSessionLogs(sid, undefined, undefined, 2000, 0).catch(() => ({ total: 0, logs: [] })),
       ]);
       setTimeline(tl);
       setAnomalies(anoms);
       setGraph(grp);
       setIncident(inc);
+      setSessionLogs(logsData.logs || []);
       setIsLoading(false);
     } catch (err: any) {
       setError(err.message || "Failed loading session data.");
@@ -196,15 +201,14 @@ export default function DashboardPage() {
         {/* AI Root Cause Incident Panel */}
         <IncidentReportPanel incident={incident} />
 
-        {/* Middle Row: Causality Graph & Heatmap */}
+        {/* Middle Row: Service Breakdown & Error Heatmap */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {graph && (
-            <CausalityGraphView
-              graph={graph}
-              selectedService={selectedService}
-              onSelectService={setSelectedService}
-            />
-          )}
+          <ServiceLogsChart
+            logs={sessionLogs}
+            selectedService={selectedService}
+            onSelectService={setSelectedService}
+            graph={graph}
+          />
 
           {summary && (
             <ErrorHeatmap
