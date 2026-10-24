@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from backend.models import Anomaly, IncidentReport, CausalityGraph, SessionSummary, ChatResponse
+from backend.models import Anomaly, IncidentReport, CausalityGraph, SessionSummary, ChatResponse, LogEntry
 from backend import llm_client
 from backend import prompts
 
